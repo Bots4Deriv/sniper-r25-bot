@@ -1,13 +1,12 @@
 """
 Sniper Signal Bot for Deriv - R_25
-Render Deployment Ready
+Render Deployment Ready - FIXED VERSION
 """
 
 import os
 import asyncio
 import json
 import logging
-import websockets
 import requests
 import pandas as pd
 import numpy as np
@@ -16,6 +15,11 @@ from dataclasses import dataclass, asdict
 from typing import Optional, Dict, Any, List
 from flask import Flask, jsonify, render_template_string
 from threading import Thread
+import time
+
+# Use threading instead of asyncio for Render compatibility
+from threading import Lock, Thread
+import queue
 
 # Configure logging
 logging.basicConfig(
@@ -27,7 +31,8 @@ logger = logging.getLogger(__name__)
 # Flask app for Render
 app = Flask(__name__)
 
-# Global state
+# Global state with thread safety
+state_lock = Lock()
 bot_state = {
     "status": "initializing",
     "last_signal": None,
@@ -38,6 +43,16 @@ bot_state = {
     "connection_status": "disconnected",
     "total_signals": 0
 }
+
+def update_state(key, value):
+    """Thread-safe state update"""
+    with state_lock:
+        bot_state[key] = value
+
+def get_state(key):
+    """Thread-safe state get"""
+    with state_lock:
+        return bot_state.get(key)
 
 
 @dataclass
@@ -58,7 +73,7 @@ class Signal:
     
     def to_telegram_message(self) -> str:
         emoji = "🟢" if self.direction == "BUY" else "🔴"
-        rr_ratio = abs(self.take_profit - self.entry_price) / abs(self.entry_price - self.stop_loss)
+        rr_ratio = abs(self.take_profit - self.entry_price) / abs(self.entry_price - self.stop_loss) if self.entry_price != self.stop_loss else 0
         
         return f"""
 {emoji} <b>SNIPER SIGNAL - R_25</b> {emoji}
@@ -87,7 +102,7 @@ class Signal:
 
 
 class SniperR25Bot:
-    """Sniper Bot for Deriv Volatility 25 Index"""
+    """Sniper Bot for Deriv Volatility 25 Index - FIXED FOR RENDER"""
     
     DERIV_APP_ID = os.getenv("DERIV_APP_ID", "1234")
     DERIV_API_TOKEN = os.getenv("DERIV_API_TOKEN", "")
@@ -116,6 +131,8 @@ class SniperR25Bot:
         self.last_signal_time = None
         self.cooldown_seconds = 300
         self.running = False
+        # Use threading.Event for thread-safe signaling
+        self._stop_event = threading.Event()
     
     def calculate_indicators(self):
         """Calculate indicators without TA-Lib"""
@@ -232,7 +249,7 @@ class SniperR25Bot:
                 timestamp=datetime.now(),
                 indicators=ind
             )
-            bot_state["total_signals"] += 1
+            update_state("total_signals", get_state("total_signals") + 1)
             
         elif sell_cross and bear_score >= self.MIN_CONFLUENCE:
             self.last_signal_time = datetime.now()
@@ -246,7 +263,7 @@ class SniperR25Bot:
                 timestamp=datetime.now(),
                 indicators=ind
             )
-            bot_state["total_signals"] += 1
+            update_state("total_signals", get_state("total_signals") + 1)
         
         return signal
     
@@ -272,44 +289,33 @@ class SniperR25Bot:
         except Exception as e:
             logger.error(f"Telegram failed: {e}")
     
-    async def connect(self):
-        """Connect to Deriv"""
-        ws_url = f"wss://ws.derivws.com/websockets/v3?app_id={self.DERIV_APP_ID}"
-        
+    def fetch_candles_rest(self):
+        """Fetch candles using REST API instead of WebSocket for stability"""
         try:
-            self.ws = await websockets.connect(ws_url)
-            logger.info("Connected to Deriv")
-            bot_state["connection_status"] = "connected"
+            url = "https://api.deriv.com/api/v1/ticks_history"
+            payload = {
+                "ticks_history": self.SYMBOL,
+                "adjust_start_time": 1,
+                "count": 100,
+                "end": "latest",
+                "start": 1,
+                "style": "candles",
+                "granularity": self.TIMEFRAME_SECONDS
+            }
             
-            await self.ws.send(json.dumps({"authorize": self.DERIV_API_TOKEN}))
-            auth_resp = await self.ws.recv()
-            auth_data = json.loads(auth_resp)
+            response = requests.post(url, json=payload, timeout=30)
+            data = response.json()
             
-            if 'error' in auth_data:
-                logger.error(f"Auth failed: {auth_data['error']}")
-                bot_state["connection_status"] = "auth_failed"
+            if 'candles' in data:
+                self.process_candles(data)
+                return True
+            elif 'error' in data:
+                logger.error(f"API Error: {data['error']}")
                 return False
-            
-            logger.info("Authorized")
-            return True
-            
+                
         except Exception as e:
-            logger.error(f"Connection error: {e}")
-            bot_state["connection_status"] = "error"
+            logger.error(f"REST API error: {e}")
             return False
-    
-    async def subscribe_candles(self):
-        """Subscribe to R_25 candles"""
-        subscribe_msg = {
-            "ticks_history": self.SYMBOL,
-            "adjust_start_time": 1,
-            "count": 100,
-            "end": "latest",
-            "start": 1,
-            "style": "candles",
-            "granularity": self.TIMEFRAME_SECONDS
-        }
-        await self.ws.send(json.dumps(subscribe_msg))
     
     def process_candles(self, data):
         """Process candle data"""
@@ -320,60 +326,67 @@ class SniperR25Bot:
         df = pd.DataFrame(candles)
         df['epoch'] = pd.to_datetime(df['epoch'], unit='s')
         self.candles = df
-        bot_state["current_price"] = float(df['close'].iloc[-1])
+        update_state("current_price", float(df['close'].iloc[-1]))
     
-    async def run(self):
-        """Main loop"""
+    def run(self):
+        """Main loop using REST API polling instead of WebSocket"""
         self.running = True
-        bot_state["status"] = "running"
+        update_state("status", "running")
+        logger.info("Bot started using REST API polling")
         
-        while self.running:
+        # Initial connection status
+        update_state("connection_status", "connected_via_rest")
+        
+        while not self._stop_event.is_set():
             try:
-                if not self.ws or bot_state["connection_status"] != "connected":
-                    success = await self.connect()
-                    if not success:
-                        await asyncio.sleep(10)
-                        continue
-                    await self.subscribe_candles()
+                # Fetch data via REST API (more stable on Render)
+                success = self.fetch_candles_rest()
                 
-                msg = await self.ws.recv()
-                data = json.loads(msg)
-                
-                if 'candles' in data or 'ohlc' in data:
-                    self.process_candles(data)
+                if success:
                     ind = self.calculate_indicators()
                     
                     if ind:
-                        bot_state["indicators"] = {k: round(v, 4) if isinstance(v, float) else v for k, v in ind.items()}
+                        update_state("indicators", {k: round(v, 4) if isinstance(v, float) else v for k, v in ind.items()})
                         signal = self.generate_signal(ind)
                         
                         if signal:
                             logger.info(f"🎯 SIGNAL: {signal.direction}")
                             self.send_telegram(signal)
-                            bot_state["last_signal"] = signal.to_dict()
-                            bot_state["signals_history"].append(signal.to_dict())
-                            if len(bot_state["signals_history"]) > 50:
-                                bot_state["signals_history"] = bot_state["signals_history"][-50:]
+                            update_state("last_signal", signal.to_dict())
+                            
+                            history = get_state("signals_history") or []
+                            history.append(signal.to_dict())
+                            if len(history) > 50:
+                                history = history[-50:]
+                            update_state("signals_history", history)
+                else:
+                    update_state("connection_status", "error_fetching")
                 
-                elif 'error' in data:
-                    logger.error(f"API Error: {data['error']}")
-                    
-            except websockets.exceptions.ConnectionClosed:
-                logger.warning("Connection closed, reconnecting...")
-                bot_state["connection_status"] = "reconnecting"
-                await asyncio.sleep(5)
+                # Poll every 30 seconds (adjust as needed)
+                time.sleep(30)
+                
             except Exception as e:
                 logger.error(f"Loop error: {e}")
-                await asyncio.sleep(5)
+                update_state("connection_status", "error")
+                time.sleep(30)
         
-        bot_state["status"] = "stopped"
+        update_state("status", "stopped")
+        logger.info("Bot stopped")
 
 
-# Flask Routes
+# Flask Routes (unchanged)
 @app.route('/')
 def dashboard():
     """Main dashboard"""
-    uptime = datetime.now() - bot_state["uptime"]
+    with state_lock:
+        uptime = datetime.now() - bot_state["uptime"]
+        status = bot_state["status"]
+        connection_status = bot_state["connection_status"]
+        current_price = bot_state["current_price"]
+        total_signals = bot_state["total_signals"]
+        indicators = bot_state["indicators"]
+        last_signal = bot_state["last_signal"]
+    
     hours, remainder = divmod(int(uptime.total_seconds()), 3600)
     minutes, seconds = divmod(remainder, 60)
     
@@ -439,12 +452,12 @@ def dashboard():
     
     return render_template_string(
         html,
-        status=bot_state["status"],
-        connection_status=bot_state["connection_status"],
-        current_price=bot_state["current_price"],
-        total_signals=bot_state["total_signals"],
-        indicators=bot_state["indicators"],
-        last_signal=bot_state["last_signal"],
+        status=status,
+        connection_status=connection_status,
+        current_price=current_price,
+        total_signals=total_signals,
+        indicators=indicators,
+        last_signal=last_signal,
         uptime_str=f"{hours}h {minutes}m {seconds}s"
     )
 
@@ -453,10 +466,10 @@ def dashboard():
 def health_check():
     """Health check"""
     return jsonify({
-        "status": "healthy" if bot_state["status"] == "running" else "unhealthy",
-        "bot_status": bot_state["status"],
-        "connection": bot_state["connection_status"],
-        "signals_count": bot_state["total_signals"]
+        "status": "healthy" if get_state("status") == "running" else "unhealthy",
+        "bot_status": get_state("status"),
+        "connection": get_state("connection_status"),
+        "signals_count": get_state("total_signals")
     })
 
 
@@ -464,26 +477,30 @@ def health_check():
 def api_signals():
     """API endpoint"""
     return jsonify({
-        "current": bot_state["last_signal"],
-        "history": bot_state["signals_history"][-20:],
-        "indicators": bot_state["indicators"],
-        "price": bot_state["current_price"]
+        "current": get_state("last_signal"),
+        "history": (get_state("signals_history") or [])[-20:],
+        "indicators": get_state("indicators"),
+        "price": get_state("current_price")
     })
 
 
 def run_bot():
-    """Run bot in background"""
+    """Run bot in background thread"""
     bot = SniperR25Bot()
-    asyncio.run(bot.run())
+    bot.run()
 
 
 def main():
     """Start Flask and Bot"""
+    # Start bot in background thread
     bot_thread = Thread(target=run_bot, daemon=True)
     bot_thread.start()
     
+    # Get port from environment (Render sets this)
     port = int(os.getenv("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+    
+    # Use threaded=True for Flask to handle concurrent requests
+    app.run(host='0.0.0.0', port=port, threaded=True)
 
 
 if __name__ == "__main__":
