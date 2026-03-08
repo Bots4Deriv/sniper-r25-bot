@@ -1,5 +1,5 @@
 flask
+websockets
 pandas
 numpy
 requests
-# Remove: websockets (no longer needed)
