@@ -1,0 +1,1245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WYCKOFF · Deriv Intelligence</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Bebas+Neue&family=Inter:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg:       #0a0c0f;
+    --bg2:      #0f1318;
+    --bg3:      #141920;
+    --border:   #1e2730;
+    --border2:  #2a3540;
+    --text:     #c8d4dc;
+    --muted:    #4a6070;
+    --accent:   #00d4aa;
+    --accent2:  #0099ff;
+    --bull:     #00d4aa;
+    --bear:     #ff4466;
+    --warn:     #ffaa00;
+    --phase-a:  #ff6b35;
+    --phase-b:  #ffcc02;
+    --phase-c:  #00d4aa;
+    --phase-d:  #0099ff;
+    --phase-e:  #cc44ff;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── HEADER ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg2);
+    flex-shrink: 0;
+    gap: 12px;
+  }
+  .logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+    letter-spacing: 4px;
+    color: var(--accent);
+    text-shadow: 0 0 20px rgba(0,212,170,.4);
+    flex-shrink: 0;
+  }
+  .logo span { color: var(--accent2); }
+
+  .controls-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  select, input[type=text], input[type=number] {
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    color: var(--text);
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: 'Share Tech Mono', monospace;
+    outline: none;
+  }
+  select:focus, input:focus { border-color: var(--accent); }
+
+  .btn {
+    padding: 5px 14px;
+    border-radius: 4px;
+    border: 1px solid var(--border2);
+    cursor: pointer;
+    font-size: 12px;
+    font-family: 'Share Tech Mono', monospace;
+    letter-spacing: 1px;
+    transition: all .15s;
+    background: var(--bg3);
+    color: var(--text);
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 600; }
+  .btn.primary:hover { background: #00ffcc; }
+  .btn.danger { background: var(--bear); color: #fff; border-color: var(--bear); }
+  .btn.danger:hover { background: #ff6688; }
+
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  .status-dot.connected { background: var(--bull); box-shadow: 0 0 6px var(--bull); animation: pulse 2s infinite; }
+  .status-dot.loading  { background: var(--warn); animation: blink .5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+  .price-display {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 18px;
+    color: var(--accent);
+    letter-spacing: 2px;
+    flex-shrink: 0;
+  }
+
+  /* ── LAYOUT ── */
+  .main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    gap: 0;
+  }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    width: 200px;
+    flex-shrink: 0;
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    padding: 10px;
+    gap: 10px;
+  }
+  .sidebar-section { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .sidebar-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: var(--muted);
+    padding: 6px 10px;
+    background: var(--bg3);
+    border-bottom: 1px solid var(--border);
+  }
+  .metric-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .metric-row:last-child { border-bottom: none; }
+  .metric-label { color: var(--muted); font-size: 11px; }
+  .metric-value { font-family: 'Share Tech Mono', monospace; font-size: 12px; }
+  .metric-value.bull { color: var(--bull); }
+  .metric-value.bear { color: var(--bear); }
+  .metric-value.warn { color: var(--warn); }
+
+  /* Phase badge */
+  .phase-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 13px;
+    letter-spacing: 1px;
+  }
+
+  /* Signal card */
+  .signal-card {
+    margin: 8px;
+    padding: 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border2);
+    background: var(--bg3);
+    text-align: center;
+  }
+  .signal-type {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 28px;
+    letter-spacing: 3px;
+  }
+  .signal-type.CALL { color: var(--bull); text-shadow: 0 0 20px rgba(0,212,170,.5); }
+  .signal-type.PUT  { color: var(--bear); text-shadow: 0 0 20px rgba(255,68,102,.5); }
+  .signal-type.WAIT { color: var(--muted); }
+  .signal-conf {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 4px;
+    font-family: 'Share Tech Mono', monospace;
+  }
+
+  /* ── CHART AREA ── */
+  .chart-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 0;
+  }
+  .chart-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg2);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+  .tf-btn {
+    padding: 2px 9px;
+    border-radius: 3px;
+    border: 1px solid var(--border2);
+    cursor: pointer;
+    font-size: 11px;
+    font-family: 'Share Tech Mono', monospace;
+    background: transparent;
+    color: var(--muted);
+    transition: all .15s;
+  }
+  .tf-btn:hover, .tf-btn.active { background: var(--accent); color: #000; border-color: var(--accent); }
+  .overlay-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 3px;
+    border: 1px solid transparent;
+    transition: all .15s;
+    user-select: none;
+  }
+  .overlay-toggle.on { color: var(--accent2); border-color: var(--accent2); }
+  .overlay-toggle input { display: none; }
+
+  canvas#chart {
+    flex: 1;
+    display: block;
+    cursor: crosshair;
+    width: 100%;
+  }
+
+  /* ── VOLUME ── */
+  canvas#volume {
+    display: block;
+    width: 100%;
+    height: 60px;
+    flex-shrink: 0;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ── LOG ── */
+  .log-panel {
+    height: 110px;
+    flex-shrink: 0;
+    border-top: 1px solid var(--border);
+    background: var(--bg2);
+    overflow-y: auto;
+    padding: 6px 10px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+  }
+  .log-line { padding: 1px 0; }
+  .log-line.info  { color: var(--muted); }
+  .log-line.bull  { color: var(--bull); }
+  .log-line.bear  { color: var(--bear); }
+  .log-line.warn  { color: var(--warn); }
+  .log-line.event { color: var(--accent2); }
+
+  /* ── LEGEND ── */
+  .legend {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    color: var(--muted);
+  }
+  .legend-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+  }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  .token-input { width: 180px; }
+  .symbol-select { width: 120px; }
+
+  label.ctrl-label { font-size: 11px; color: var(--muted); white-space: nowrap; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">WYCK<span>OFF</span></div>
+
+  <div class="controls-row">
+    <span class="status-dot" id="statusDot"></span>
+    <span id="statusText" style="font-size:11px;color:var(--muted);">DISCONNECTED</span>
+
+    <label class="ctrl-label">API TOKEN</label>
+    <input type="text" id="apiToken" class="token-input" placeholder="your_deriv_api_token" />
+
+    <label class="ctrl-label">SYMBOL</label>
+    <select id="symbolSelect" class="symbol-select">
+      <option value="R_10">Vol 10 Index</option>
+      <option value="R_25">Vol 25 Index</option>
+      <option value="R_50" selected>Vol 50 Index</option>
+      <option value="R_75">Vol 75 Index</option>
+      <option value="R_100">Vol 100 Index</option>
+      <option value="1HZ10V">Vol 10(1s) Index</option>
+      <option value="1HZ25V">Vol 25(1s) Index</option>
+      <option value="1HZ50V">Vol 50(1s) Index</option>
+      <option value="1HZ75V">Vol 75(1s) Index</option>
+      <option value="1HZ100V">Vol 100(1s) Index</option>
+    </select>
+
+    <button class="btn primary" id="connectBtn" onclick="connectWS()">CONNECT</button>
+    <button class="btn danger"  id="disconnectBtn" onclick="disconnectWS()" style="display:none">DISCONNECT</button>
+  </div>
+
+  <div class="price-display" id="priceDisplay">—</div>
+</header>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+
+    <!-- Signal -->
+    <div class="sidebar-section">
+      <div class="sidebar-title">SIGNAL</div>
+      <div class="signal-card">
+        <div class="signal-type WAIT" id="signalType">WAIT</div>
+        <div class="signal-conf" id="signalConf">awaiting data…</div>
+      </div>
+    </div>
+
+    <!-- Wyckoff Phase -->
+    <div class="sidebar-section">
+      <div class="sidebar-title">WYCKOFF PHASE</div>
+      <div class="metric-row">
+        <span class="metric-label">Phase</span>
+        <span class="metric-value" id="phaseLabel">—</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Sub</span>
+        <span class="metric-value" id="phaseSubLabel">—</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Cause</span>
+        <span class="metric-value" id="causeLabel">—</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Effort/Result</span>
+        <span class="metric-value" id="erLabel">—</span>
+      </div>
+    </div>
+
+    <!-- Wyckoff Events -->
+    <div class="sidebar-section">
+      <div class="sidebar-title">EVENTS</div>
+      <div class="metric-row"><span class="metric-label">PSY</span><span class="metric-value" id="evPSY">—</span></div>
+      <div class="metric-row"><span class="metric-label">SC/BC</span><span class="metric-value" id="evSC">—</span></div>
+      <div class="metric-row"><span class="metric-label">AR</span><span class="metric-value" id="evAR">—</span></div>
+      <div class="metric-row"><span class="metric-label">ST/UT</span><span class="metric-value" id="evST">—</span></div>
+      <div class="metric-row"><span class="metric-label">Spring/UTAD</span><span class="metric-value" id="evSpring">—</span></div>
+      <div class="metric-row"><span class="metric-label">LPS/LPSY</span><span class="metric-value" id="evLPS">—</span></div>
+      <div class="metric-row"><span class="metric-label">SOS/SOW</span><span class="metric-value" id="evSOS">—</span></div>
+    </div>
+
+    <!-- Structure -->
+    <div class="sidebar-section">
+      <div class="sidebar-title">STRUCTURE</div>
+      <div class="metric-row"><span class="metric-label">Trend</span><span class="metric-value" id="trendLabel">—</span></div>
+      <div class="metric-row"><span class="metric-label">RSI(14)</span><span class="metric-value" id="rsiVal">—</span></div>
+      <div class="metric-row"><span class="metric-label">ATR(14)</span><span class="metric-value" id="atrVal">—</span></div>
+      <div class="metric-row"><span class="metric-label">Vol Spread</span><span class="metric-value" id="vsLabel">—</span></div>
+      <div class="metric-row"><span class="metric-label">Candles</span><span class="metric-value" id="candleCount">0</span></div>
+    </div>
+
+    <!-- Legend -->
+    <div class="sidebar-section">
+      <div class="sidebar-title">PHASE LEGEND</div>
+      <div style="padding:8px 10px; display:flex; flex-direction:column; gap:5px;">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--phase-a)"></div> Phase A — Stopping</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--phase-b)"></div> Phase B — Building Cause</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--phase-c)"></div> Phase C — Test</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--phase-d)"></div> Phase D — Trend in Range</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--phase-e)"></div> Phase E — Markup/Down</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- CHART AREA -->
+  <div class="chart-area">
+    <div class="chart-toolbar">
+      <span style="font-size:11px;color:var(--muted);font-family:'Share Tech Mono',monospace">TF:</span>
+      <button class="tf-btn" data-tf="60"   onclick="setTF(60)">1m</button>
+      <button class="tf-btn active" data-tf="300"  onclick="setTF(300)">5m</button>
+      <button class="tf-btn" data-tf="900"  onclick="setTF(900)">15m</button>
+      <button class="tf-btn" data-tf="3600" onclick="setTF(3600)">1h</button>
+      <span style="flex:1"></span>
+      <div class="legend">
+        <label class="overlay-toggle on" id="tog_ema" onclick="toggleOverlay('ema')">
+          <input type="checkbox" checked> EMA 20/50
+        </label>
+        <label class="overlay-toggle on" id="tog_vwap" onclick="toggleOverlay('vwap')">
+          <input type="checkbox" checked> VWAP
+        </label>
+        <label class="overlay-toggle on" id="tog_wyck" onclick="toggleOverlay('wyck')">
+          <input type="checkbox" checked> Wyckoff Zones
+        </label>
+        <label class="overlay-toggle on" id="tog_events" onclick="toggleOverlay('events')">
+          <input type="checkbox" checked> Events
+        </label>
+      </div>
+    </div>
+
+    <canvas id="chart"></canvas>
+    <canvas id="volume"></canvas>
+
+    <div class="log-panel" id="logPanel"></div>
+  </div>
+
+</div>
+
+<script>
+// ═══════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════
+let ws = null;
+let candles = [];       // { t, o, h, l, c, v }
+let currentTF = 300;
+let liveCandle = null;
+let overlays = { ema: true, vwap: true, wyck: true, events: true };
+let symbol = 'R_50';
+let apiToken = '';
+let raf = null;
+let scrollOffset = 0;   // candles from right
+let candleW = 8;
+const MIN_CANDLES = 300;
+let wyckoffState = {};
+let lastSignal = { type: 'WAIT', conf: 'awaiting data…', score: 0 };
+let mouseX = -1, mouseY = -1;
+
+// ═══════════════════════════════════════════════
+//  CANVAS SETUP
+// ═══════════════════════════════════════════════
+const chartCanvas  = document.getElementById('chart');
+const volCanvas    = document.getElementById('volume');
+const cctx = chartCanvas.getContext('2d');
+const vctx = volCanvas.getContext('2d');
+
+function resizeCanvases() {
+  const area = document.querySelector('.chart-area');
+  const log  = document.querySelector('.log-panel');
+  const toolbar = document.querySelector('.chart-toolbar');
+  const W = area.clientWidth;
+  const totalH = area.clientHeight - toolbar.offsetHeight - log.offsetHeight - volCanvas.offsetHeight - 2;
+
+  chartCanvas.width  = W;
+  chartCanvas.height = Math.max(totalH, 200);
+  volCanvas.width    = W;
+  volCanvas.height   = 60;
+  draw();
+}
+window.addEventListener('resize', resizeCanvases);
+
+// ═══════════════════════════════════════════════
+//  WEBSOCKET
+// ═══════════════════════════════════════════════
+function connectWS() {
+  symbol   = document.getElementById('symbolSelect').value;
+  apiToken = document.getElementById('apiToken').value.trim();
+  if (!apiToken) { addLog('⚠ Enter your Deriv API token first', 'warn'); return; }
+
+  setStatus('loading');
+  addLog(`Connecting to Deriv WebSocket… [${symbol}]`, 'info');
+
+  ws = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
+
+  ws.onopen = () => {
+    setStatus('connected');
+    addLog('WebSocket connected', 'event');
+    // Authorize
+    ws.send(JSON.stringify({ authorize: apiToken }));
+  };
+
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    handleMessage(msg);
+  };
+
+  ws.onerror = (e) => { addLog('WebSocket error', 'warn'); setStatus('disconnected'); };
+  ws.onclose = ()  => { addLog('WebSocket closed', 'info'); setStatus('disconnected'); showConnect(); };
+
+  document.getElementById('connectBtn').style.display    = 'none';
+  document.getElementById('disconnectBtn').style.display = '';
+}
+
+function disconnectWS() {
+  if (ws) ws.close();
+  showConnect();
+}
+function showConnect() {
+  document.getElementById('connectBtn').style.display    = '';
+  document.getElementById('disconnectBtn').style.display = 'none';
+}
+
+function handleMessage(msg) {
+  if (msg.error) { addLog('API error: ' + msg.error.message, 'warn'); return; }
+
+  if (msg.msg_type === 'authorize') {
+    addLog(`Authorized as ${msg.authorize.loginid}`, 'event');
+    loadHistory();
+  }
+
+  if (msg.msg_type === 'candles') {
+    const raw = msg.candles;
+    candles = raw.map(c => ({
+      t: c.epoch, o: +c.open, h: +c.high, l: +c.low, c: +c.close, v: 1
+    }));
+    addLog(`Loaded ${candles.length} historical candles [TF: ${currentTF}s]`, 'event');
+    document.getElementById('candleCount').textContent = candles.length;
+    analyzeWyckoff();
+    subscribeToTicks();
+  }
+
+  if (msg.msg_type === 'ohlc') {
+    const d = msg.ohlc;
+    const epoch = +d.open_time;
+    const c = { t: epoch, o: +d.open, h: +d.high, l: +d.low, c: +d.close, v: 1 };
+    // merge into last candle or append
+    if (candles.length > 0 && candles[candles.length-1].t === epoch) {
+      candles[candles.length-1] = c;
+    } else {
+      candles.push(c);
+      if (candles.length > 2000) candles.shift();
+    }
+    document.getElementById('candleCount').textContent = candles.length;
+    document.getElementById('priceDisplay').textContent = d.close;
+    analyzeWyckoff();
+  }
+
+  if (msg.msg_type === 'tick') {
+    document.getElementById('priceDisplay').textContent = (+msg.tick.quote).toFixed(
+      symbol.includes('1HZ') ? 2 : 4
+    );
+  }
+}
+
+function loadHistory() {
+  const end = Math.floor(Date.now() / 1000);
+  const start = end - currentTF * MIN_CANDLES;
+  addLog(`Fetching ${MIN_CANDLES} candles (TF=${currentTF}s)…`, 'info');
+  ws.send(JSON.stringify({
+    ticks_history: symbol,
+    granularity: currentTF,
+    start, end,
+    count: MIN_CANDLES,
+    style: 'candles',
+    adjust_start_time: 1
+  }));
+}
+
+function subscribeToTicks() {
+  // subscribe OHLC stream
+  ws.send(JSON.stringify({
+    ticks_history: symbol,
+    granularity: currentTF,
+    style: 'candles',
+    subscribe: 1,
+    count: 1,
+    end: 'latest'
+  }));
+  // raw tick for price display
+  ws.send(JSON.stringify({ ticks: symbol, subscribe: 1 }));
+  addLog('Subscribed to live OHLC stream', 'event');
+}
+
+// ═══════════════════════════════════════════════
+//  INDICATORS
+// ═══════════════════════════════════════════════
+function ema(data, period) {
+  const k = 2 / (period + 1);
+  const out = [];
+  let prev = null;
+  for (let i = 0; i < data.length; i++) {
+    if (prev === null) { prev = data[i]; out.push(prev); continue; }
+    prev = data[i] * k + prev * (1 - k);
+    out.push(prev);
+  }
+  return out;
+}
+
+function rsi(closes, period = 14) {
+  if (closes.length < period + 1) return null;
+  let gains = 0, losses = 0;
+  for (let i = 1; i <= period; i++) {
+    const d = closes[i] - closes[i-1];
+    if (d >= 0) gains += d; else losses -= d;
+  }
+  let avgG = gains / period, avgL = losses / period;
+  for (let i = period + 1; i < closes.length; i++) {
+    const d = closes[i] - closes[i-1];
+    avgG = (avgG * (period-1) + Math.max(d, 0)) / period;
+    avgL = (avgL * (period-1) + Math.max(-d, 0)) / period;
+  }
+  if (avgL === 0) return 100;
+  return 100 - 100 / (1 + avgG / avgL);
+}
+
+function atr(candles, period = 14) {
+  if (candles.length < period + 1) return null;
+  const trs = [];
+  for (let i = 1; i < candles.length; i++) {
+    const tr = Math.max(
+      candles[i].h - candles[i].l,
+      Math.abs(candles[i].h - candles[i-1].c),
+      Math.abs(candles[i].l - candles[i-1].c)
+    );
+    trs.push(tr);
+  }
+  let sum = 0;
+  for (let i = 0; i < period; i++) sum += trs[i];
+  let atrVal = sum / period;
+  for (let i = period; i < trs.length; i++) atrVal = (atrVal * (period-1) + trs[i]) / period;
+  return atrVal;
+}
+
+function vwap(candles) {
+  let cumPV = 0, cumV = 0;
+  return candles.map(c => {
+    const tp = (c.h + c.l + c.c) / 3;
+    const v = c.v || 1;
+    cumPV += tp * v;
+    cumV  += v;
+    return cumPV / cumV;
+  });
+}
+
+// ═══════════════════════════════════════════════
+//  WYCKOFF ENGINE
+// ═══════════════════════════════════════════════
+function findPivots(candles, lookback = 5) {
+  const highs = [], lows = [];
+  for (let i = lookback; i < candles.length - lookback; i++) {
+    let isHigh = true, isLow = true;
+    for (let j = i - lookback; j <= i + lookback; j++) {
+      if (j === i) continue;
+      if (candles[j].h >= candles[i].h) isHigh = false;
+      if (candles[j].l <= candles[i].l) isLow  = false;
+    }
+    if (isHigh) highs.push({ i, price: candles[i].h, t: candles[i].t });
+    if (isLow)  lows.push({ i, price: candles[i].l, t: candles[i].t });
+  }
+  return { highs, lows };
+}
+
+function avgVol(candles, start, end) {
+  let sum = 0, count = 0;
+  for (let i = start; i <= end && i < candles.length; i++) {
+    sum += candles[i].v || 1;
+    count++;
+  }
+  return count ? sum / count : 1;
+}
+
+function analyzeWyckoff() {
+  if (candles.length < 50) return;
+  const n = candles.length;
+  const closes = candles.map(c => c.c);
+  const ema20  = ema(closes, 20);
+  const ema50  = ema(closes, 50);
+  const vwapArr= vwap(candles);
+  const rsiVal = rsi(closes.slice(-30), 14);
+  const atrVal = atr(candles.slice(-30), 14);
+  const { highs, lows } = findPivots(candles, 5);
+
+  const last = candles[n-1];
+  const curEma20 = ema20[n-1];
+  const curEma50 = ema50[n-1];
+  const curVwap  = vwapArr[n-1];
+
+  // --- TREND ---
+  const trend = (curEma20 > curEma50) ? 'BULLISH' : 'BEARISH';
+
+  // --- Volume Spread Analysis ---
+  const avgV10 = avgVol(candles, n-10, n-1);
+  const lastV  = candles[n-1].v || 1;
+  const lastSpread = last.h - last.l;
+  const avgSpread  = candles.slice(-10).reduce((a,c) => a + (c.h - c.l), 0) / 10;
+  const vsLabel  = lastV > avgV10 * 1.5 ? 'HIGH VOL' : lastV < avgV10 * 0.5 ? 'LOW VOL' : 'NORMAL';
+  const effortResult = (lastV > avgV10 * 1.2 && lastSpread < avgSpread * 0.7) ? 'EFFORT↑/RESULT↓ (Absorption)' :
+                       (lastV > avgV10 * 1.2 && lastSpread > avgSpread * 1.3) ? 'EFFORT↑/RESULT↑ (SOS/SOW)' :
+                       (lastV < avgV10 * 0.7 && lastSpread < avgSpread * 0.7) ? 'EFFORT↓/RESULT↓ (No Interest)' :
+                       'NEUTRAL';
+
+  // --- Detect Wyckoff Events ---
+  // Find highest high and lowest low in range
+  const rangeLow  = Math.min(...candles.slice(-80).map(c => c.l));
+  const rangeHigh = Math.max(...candles.slice(-80).map(c => c.h));
+  const rangeSize = rangeHigh - rangeLow;
+  const posInRange = rangeSize > 0 ? (last.c - rangeLow) / rangeSize : 0.5;
+
+  // Selling Climax / Buying Climax detection
+  const climaxWindow = candles.slice(-20);
+  const maxV = Math.max(...climaxWindow.map(c => c.v || 1));
+  const scCandle = climaxWindow.find(c => (c.v||1) >= maxV * 0.95 && Math.abs(c.c - c.o) / (c.h - c.l) < 0.5);
+  const isClimax = !!scCandle;
+
+  // Spring / UTAD
+  let isSpring = false, isUTAD = false;
+  if (lows.length >= 2) {
+    const lastLow = lows[lows.length - 1];
+    const prevLow = lows[lows.length - 2];
+    if (lastLow.price < prevLow.price && last.c > prevLow.price) isSpring = true;
+  }
+  if (highs.length >= 2) {
+    const lastHigh = highs[highs.length - 1];
+    const prevHigh = highs[highs.length - 2];
+    if (lastHigh.price > prevHigh.price && last.c < prevHigh.price) isUTAD = true;
+  }
+
+  // --- Phase Detection ---
+  let phase = 'B', phaseSub = 'Building Cause';
+  // Phase A: stopping of prior trend - large volume near extreme
+  if (isClimax && (posInRange < 0.15 || posInRange > 0.85)) {
+    phase = 'A'; phaseSub = posInRange < 0.15 ? 'Selling Climax' : 'Buying Climax';
+  }
+  // Phase C: Spring or UTAD
+  else if (isSpring) { phase = 'C'; phaseSub = 'Spring (Test Below Range)'; }
+  else if (isUTAD)   { phase = 'C'; phaseSub = 'UTAD (Test Above Range)'; }
+  // Phase D: Last Point of Supply/Support
+  else if (posInRange > 0.6 && trend === 'BULLISH' && rsiVal > 55) {
+    phase = 'D'; phaseSub = 'LPS — Last Point of Support';
+  }
+  else if (posInRange < 0.4 && trend === 'BEARISH' && rsiVal < 45) {
+    phase = 'D'; phaseSub = 'LPSY — Last Point of Supply';
+  }
+  // Phase E: Breakout
+  else if (last.c > rangeHigh * 0.998 && trend === 'BULLISH') {
+    phase = 'E'; phaseSub = 'Markup — Breakout';
+  }
+  else if (last.c < rangeLow * 1.002 && trend === 'BEARISH') {
+    phase = 'E'; phaseSub = 'Markdown — Breakdown';
+  }
+
+  // --- Signal Logic ---
+  let score = 0;
+  const reasons = [];
+
+  if (trend === 'BULLISH') { score += 20; reasons.push('Bullish EMA'); }
+  else                     { score -= 20; reasons.push('Bearish EMA'); }
+
+  if (last.c > curVwap)    { score += 15; reasons.push('Price > VWAP'); }
+  else                     { score -= 15; reasons.push('Price < VWAP'); }
+
+  if (rsiVal !== null) {
+    if (rsiVal < 35)       { score += 25; reasons.push(`RSI Oversold(${rsiVal.toFixed(0)})`); }
+    else if (rsiVal > 65)  { score -= 25; reasons.push(`RSI Overbought(${rsiVal.toFixed(0)})`); }
+  }
+
+  if (isSpring)            { score += 35; reasons.push('🌱 Spring Detected'); }
+  if (isUTAD)             { score -= 35; reasons.push('🔺 UTAD Detected'); }
+
+  if (phase === 'C' && isSpring)   { score += 20; reasons.push('Phase C Spring'); }
+  if (phase === 'D' && trend === 'BULLISH') { score += 20; reasons.push('Phase D LPS'); }
+  if (phase === 'D' && trend === 'BEARISH') { score -= 20; reasons.push('Phase D LPSY'); }
+  if (phase === 'E' && trend === 'BULLISH') { score += 30; reasons.push('Phase E Markup'); }
+  if (phase === 'E' && trend === 'BEARISH') { score -= 30; reasons.push('Phase E Markdown'); }
+
+  if (effortResult.includes('SOS/SOW') && trend === 'BULLISH') { score += 15; reasons.push('SOS Effort'); }
+  if (effortResult.includes('SOS/SOW') && trend === 'BEARISH') { score -= 15; reasons.push('SOW Effort'); }
+
+  let sigType = 'WAIT', sigConf = '';
+  if (score >= 50)       { sigType = 'CALL'; sigConf = `Score: +${score} | ${reasons.slice(0,3).join(' · ')}`; }
+  else if (score <= -50) { sigType = 'PUT';  sigConf = `Score: ${score} | ${reasons.slice(0,3).join(' · ')}`; }
+  else                   { sigType = 'WAIT'; sigConf = `Score: ${score} | Neutral Zone`; }
+
+  if (sigType !== lastSignal.type && (sigType === 'CALL' || sigType === 'PUT')) {
+    addLog(`▶ NEW SIGNAL: ${sigType} | ${sigConf}`, sigType === 'CALL' ? 'bull' : 'bear');
+  }
+  lastSignal = { type: sigType, conf: sigConf, score };
+
+  // Store state for drawing
+  wyckoffState = {
+    ema20, ema50, vwapArr,
+    rsiVal, atrVal, trend, vsLabel, effortResult,
+    phase, phaseSub, isSpring, isUTAD, isClimax,
+    rangeLow, rangeHigh, pivots: { highs, lows },
+    posInRange, score, sigType, sigConf
+  };
+
+  updateSidebar();
+}
+
+function updateSidebar() {
+  const w = wyckoffState;
+  if (!w.phase) return;
+
+  const phaseColors = { A: 'var(--phase-a)', B: 'var(--phase-b)', C: 'var(--phase-c)', D: 'var(--phase-d)', E: 'var(--phase-e)' };
+  const pc = phaseColors[w.phase] || 'var(--text)';
+
+  document.getElementById('phaseLabel').innerHTML =
+    `<span style="color:${pc};font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:2px">Phase ${w.phase}</span>`;
+  document.getElementById('phaseSubLabel').textContent = w.phaseSub;
+  document.getElementById('causeLabel').textContent = w.posInRange !== undefined
+    ? `${(w.posInRange*100).toFixed(0)}% of Range` : '—';
+  document.getElementById('erLabel').textContent = w.effortResult || '—';
+
+  document.getElementById('evPSY').innerHTML  = `<span style="color:var(--muted)">Preliminary</span>`;
+  document.getElementById('evSC').innerHTML   = w.isClimax
+    ? `<span class="metric-value warn">DETECTED</span>` : `<span style="color:var(--muted)">—</span>`;
+  document.getElementById('evAR').innerHTML   = `<span style="color:var(--muted)">Auto Rally</span>`;
+  document.getElementById('evST').innerHTML   = `<span style="color:var(--muted)">Secondary Test</span>`;
+  document.getElementById('evSpring').innerHTML = w.isSpring
+    ? `<span class="metric-value bull">🌱 SPRING</span>` : w.isUTAD
+    ? `<span class="metric-value bear">🔺 UTAD</span>` : `<span style="color:var(--muted)">—</span>`;
+  document.getElementById('evLPS').innerHTML  = (w.phase === 'D')
+    ? `<span class="metric-value ${w.trend === 'BULLISH' ? 'bull' : 'bear'}">${w.trend === 'BULLISH' ? 'LPS' : 'LPSY'}</span>`
+    : `<span style="color:var(--muted)">—</span>`;
+  document.getElementById('evSOS').innerHTML  = (w.phase === 'E')
+    ? `<span class="metric-value ${w.trend === 'BULLISH' ? 'bull' : 'bear'}">${w.trend === 'BULLISH' ? 'SOS' : 'SOW'}</span>`
+    : `<span style="color:var(--muted)">—</span>`;
+
+  const tc = w.trend === 'BULLISH' ? 'bull' : 'bear';
+  document.getElementById('trendLabel').innerHTML = `<span class="metric-value ${tc}">${w.trend}</span>`;
+  document.getElementById('rsiVal').innerHTML = w.rsiVal !== null
+    ? `<span class="metric-value ${w.rsiVal<35?'bull':w.rsiVal>65?'bear':''}">${w.rsiVal.toFixed(1)}</span>` : '—';
+  document.getElementById('atrVal').textContent = w.atrVal ? w.atrVal.toFixed(5) : '—';
+  document.getElementById('vsLabel').innerHTML =
+    `<span class="metric-value ${w.vsLabel==='HIGH VOL'?'warn':''}">${w.vsLabel||'—'}</span>`;
+
+  // Signal
+  const st = document.getElementById('signalType');
+  st.textContent = w.sigType;
+  st.className   = `signal-type ${w.sigType}`;
+  document.getElementById('signalConf').textContent = w.sigConf;
+}
+
+// ═══════════════════════════════════════════════
+//  DRAWING
+// ═══════════════════════════════════════════════
+function draw() {
+  const W = chartCanvas.width;
+  const H = chartCanvas.height;
+  if (!W || !H) return;
+
+  cctx.clearRect(0, 0, W, H);
+  vctx.clearRect(0, 0, W, volCanvas.height);
+
+  // Background
+  cctx.fillStyle = '#0a0c0f';
+  cctx.fillRect(0, 0, W, H);
+
+  if (candles.length === 0) {
+    cctx.fillStyle = '#2a3540';
+    cctx.font = '14px "Share Tech Mono"';
+    cctx.textAlign = 'center';
+    cctx.fillText('CONNECT & LOAD DATA TO BEGIN', W/2, H/2);
+    return;
+  }
+
+  // Visible candles
+  const candleSpacing = candleW + 2;
+  const visCount = Math.floor(W / candleSpacing) + 1;
+  const startIdx  = Math.max(0, candles.length - visCount - scrollOffset);
+  const endIdx    = Math.max(0, candles.length - scrollOffset);
+  const visible   = candles.slice(startIdx, endIdx);
+
+  if (!visible.length) return;
+
+  const prices = visible.flatMap(c => [c.h, c.l]);
+  let priceMin = Math.min(...prices);
+  let priceMax = Math.max(...prices);
+  const pad = (priceMax - priceMin) * 0.1;
+  priceMin -= pad; priceMax += pad;
+
+  const py = v => H - ((v - priceMin) / (priceMax - priceMin)) * H;
+  const px = i => (i + 0.5) * candleSpacing;
+
+  // Grid
+  drawGrid(cctx, W, H, priceMin, priceMax);
+
+  // Wyckoff zones
+  if (overlays.wyck && wyckoffState.rangeLow) {
+    drawWyckoffZones(visible, startIdx, px, py, W, H, priceMin, priceMax);
+  }
+
+  // VWAP
+  if (overlays.vwap && wyckoffState.vwapArr) {
+    drawLine(cctx, wyckoffState.vwapArr.slice(startIdx, endIdx), px, py, '#ffaa00', 1.5, [4,3]);
+  }
+
+  // EMAs
+  if (overlays.ema && wyckoffState.ema20) {
+    drawLine(cctx, wyckoffState.ema20.slice(startIdx, endIdx), px, py, '#0099ff', 1.5);
+    drawLine(cctx, wyckoffState.ema50.slice(startIdx, endIdx), px, py, '#cc44ff', 1.5);
+  }
+
+  // Candles
+  for (let i = 0; i < visible.length; i++) {
+    const c = visible[i];
+    const x = px(i);
+    const isBull = c.c >= c.o;
+    cctx.strokeStyle = isBull ? '#00d4aa' : '#ff4466';
+    cctx.fillStyle   = isBull ? 'rgba(0,212,170,.7)' : 'rgba(255,68,102,.7)';
+    cctx.lineWidth = 1;
+
+    // Wick
+    cctx.beginPath();
+    cctx.moveTo(x, py(c.h));
+    cctx.lineTo(x, py(c.l));
+    cctx.stroke();
+
+    // Body
+    const top    = py(Math.max(c.o, c.c));
+    const bottom = py(Math.min(c.o, c.c));
+    const bh     = Math.max(1, bottom - top);
+    cctx.fillRect(x - candleW/2, top, candleW, bh);
+    cctx.strokeRect(x - candleW/2, top, candleW, bh);
+  }
+
+  // Event markers
+  if (overlays.events) drawEventMarkers(visible, startIdx, px, py);
+
+  // Crosshair
+  if (mouseX > 0) drawCrosshair(cctx, W, H, mouseX, mouseY, priceMin, priceMax, visible, px, candleSpacing);
+
+  // Volume bars
+  drawVolume(visible, candleSpacing);
+
+  // Price line
+  if (visible.length) {
+    const lastP = visible[visible.length-1].c;
+    const y = py(lastP);
+    cctx.strokeStyle = 'rgba(0,212,170,.6)';
+    cctx.setLineDash([3,3]);
+    cctx.lineWidth = 1;
+    cctx.beginPath();
+    cctx.moveTo(0, y); cctx.lineTo(W, y);
+    cctx.stroke();
+    cctx.setLineDash([]);
+    cctx.fillStyle = '#00d4aa';
+    cctx.fillRect(W - 68, y - 9, 68, 18);
+    cctx.fillStyle = '#000';
+    cctx.font = '11px "Share Tech Mono"';
+    cctx.textAlign = 'right';
+    cctx.fillText(lastP.toFixed(4), W - 4, y + 4);
+  }
+}
+
+function drawGrid(ctx, W, H, priceMin, priceMax) {
+  ctx.strokeStyle = '#1a2228';
+  ctx.lineWidth   = 1;
+  const steps = 6;
+  for (let i = 0; i <= steps; i++) {
+    const y = (i / steps) * H;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    const price = priceMax - (i / steps) * (priceMax - priceMin);
+    ctx.fillStyle = '#2a3540';
+    ctx.font = '10px "Share Tech Mono"';
+    ctx.textAlign = 'left';
+    ctx.fillText(price.toFixed(4), 4, y - 2);
+  }
+  const vSteps = 8;
+  for (let i = 0; i <= vSteps; i++) {
+    const x = (i / vSteps) * W;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+  }
+}
+
+function drawLine(ctx, data, px, py, color, lw = 1, dash = []) {
+  if (data.length < 2) return;
+  ctx.strokeStyle = color;
+  ctx.lineWidth   = lw;
+  ctx.setLineDash(dash);
+  ctx.beginPath();
+  for (let i = 0; i < data.length; i++) {
+    if (data[i] === undefined) continue;
+    const x = px(i), y = py(data[i]);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function drawWyckoffZones(visible, startIdx, px, py, W, H, priceMin, priceMax) {
+  const w = wyckoffState;
+  const phaseColors = {
+    A: 'rgba(255,107,53,0.07)',
+    B: 'rgba(255,204,2,0.07)',
+    C: 'rgba(0,212,170,0.08)',
+    D: 'rgba(0,153,255,0.07)',
+    E: 'rgba(204,68,255,0.07)',
+  };
+  const col = phaseColors[w.phase] || 'rgba(255,255,255,.04)';
+
+  // Range box
+  if (w.rangeLow && w.rangeHigh) {
+    cctx.fillStyle = 'rgba(0,153,255,.04)';
+    cctx.fillRect(0, py(w.rangeHigh), W, py(w.rangeLow) - py(w.rangeHigh));
+
+    // Resistance
+    cctx.strokeStyle = 'rgba(0,153,255,.4)';
+    cctx.lineWidth = 1;
+    cctx.setLineDash([6,3]);
+    cctx.beginPath(); cctx.moveTo(0, py(w.rangeHigh)); cctx.lineTo(W, py(w.rangeHigh)); cctx.stroke();
+    // Support
+    cctx.strokeStyle = 'rgba(0,212,170,.4)';
+    cctx.beginPath(); cctx.moveTo(0, py(w.rangeLow)); cctx.lineTo(W, py(w.rangeLow)); cctx.stroke();
+    cctx.setLineDash([]);
+
+    cctx.fillStyle = 'rgba(0,153,255,.5)';
+    cctx.font = '10px "Share Tech Mono"';
+    cctx.textAlign = 'right';
+    cctx.fillText('RESISTANCE', W - 4, py(w.rangeHigh) - 3);
+    cctx.fillStyle = 'rgba(0,212,170,.5)';
+    cctx.fillText('SUPPORT', W - 4, py(w.rangeLow) + 12);
+  }
+
+  // Phase label box in top-left
+  const phaseLabels = { A:'A - STOPPING', B:'B - CAUSE', C:'C - TEST', D:'D - TREND', E:'E - BREAKOUT' };
+  const phaseEdgeColors = { A:'#ff6b35', B:'#ffcc02', C:'#00d4aa', D:'#0099ff', E:'#cc44ff' };
+  const pLabel = phaseLabels[w.phase] || '';
+  const pEdge  = phaseEdgeColors[w.phase] || '#fff';
+  cctx.fillStyle = 'rgba(10,12,15,.8)';
+  cctx.fillRect(10, 10, 145, 22);
+  cctx.fillStyle = pEdge;
+  cctx.fillRect(10, 10, 3, 22);
+  cctx.fillStyle = pEdge;
+  cctx.font = '12px "Bebas Neue"';
+  cctx.textAlign = 'left';
+  cctx.letterSpacing = '2px';
+  cctx.fillText('PHASE ' + pLabel, 18, 26);
+}
+
+function drawEventMarkers(visible, startIdx, px, py) {
+  const w = wyckoffState;
+  if (!w.pivots) return;
+  const { highs, lows } = w.pivots;
+
+  // Spring marker on last few lows
+  lows.slice(-3).forEach(lv => {
+    const relI = lv.i - startIdx;
+    if (relI < 0 || relI >= visible.length) return;
+    const x = px(relI), y = py(lv.price);
+    cctx.fillStyle = '#00d4aa';
+    cctx.beginPath();
+    cctx.moveTo(x, y + 14);
+    cctx.lineTo(x - 6, y + 22);
+    cctx.lineTo(x + 6, y + 22);
+    cctx.closePath();
+    cctx.fill();
+    cctx.fillStyle = '#00d4aa';
+    cctx.font = '9px "Share Tech Mono"';
+    cctx.textAlign = 'center';
+    cctx.fillText('LOW', x, y + 32);
+  });
+
+  highs.slice(-3).forEach(hv => {
+    const relI = hv.i - startIdx;
+    if (relI < 0 || relI >= visible.length) return;
+    const x = px(relI), y = py(hv.price);
+    cctx.fillStyle = '#ff4466';
+    cctx.beginPath();
+    cctx.moveTo(x, y - 14);
+    cctx.lineTo(x - 6, y - 22);
+    cctx.lineTo(x + 6, y - 22);
+    cctx.closePath();
+    cctx.fill();
+    cctx.fillStyle = '#ff4466';
+    cctx.font = '9px "Share Tech Mono"';
+    cctx.textAlign = 'center';
+    cctx.fillText('HIGH', x, y - 25);
+  });
+
+  // Spring / UTAD badge
+  if (w.isSpring && lows.length) {
+    const lv = lows[lows.length-1];
+    const relI = lv.i - startIdx;
+    if (relI >= 0 && relI < visible.length) {
+      const x = px(relI), y = py(lv.price);
+      cctx.fillStyle = '#00d4aa';
+      cctx.font = 'bold 11px "Share Tech Mono"';
+      cctx.textAlign = 'center';
+      cctx.fillText('🌱 SPRING', x, y + 44);
+    }
+  }
+  if (w.isUTAD && highs.length) {
+    const hv = highs[highs.length-1];
+    const relI = hv.i - startIdx;
+    if (relI >= 0 && relI < visible.length) {
+      const x = px(relI), y = py(hv.price);
+      cctx.fillStyle = '#ff4466';
+      cctx.font = 'bold 11px "Share Tech Mono"';
+      cctx.textAlign = 'center';
+      cctx.fillText('🔺 UTAD', x, y - 36);
+    }
+  }
+}
+
+function drawCrosshair(ctx, W, H, mx, my, priceMin, priceMax, visible, px, spacing) {
+  ctx.strokeStyle = 'rgba(255,255,255,.15)';
+  ctx.lineWidth   = 1;
+  ctx.setLineDash([3,3]);
+  ctx.beginPath(); ctx.moveTo(mx, 0); ctx.lineTo(mx, H); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, my); ctx.lineTo(W, my); ctx.stroke();
+  ctx.setLineDash([]);
+
+  const price = priceMax - (my / H) * (priceMax - priceMin);
+  ctx.fillStyle = 'rgba(10,12,15,.9)';
+  ctx.fillRect(0, my - 9, 68, 18);
+  ctx.fillStyle = '#c8d4dc';
+  ctx.font = '10px "Share Tech Mono"';
+  ctx.textAlign = 'left';
+  ctx.fillText(price.toFixed(4), 4, my + 4);
+}
+
+function drawVolume(visible, spacing) {
+  const VW = volCanvas.width;
+  const VH = volCanvas.height;
+  vctx.fillStyle = '#0a0c0f';
+  vctx.fillRect(0, 0, VW, VH);
+
+  const maxV = Math.max(...visible.map(c => c.v || 1), 1);
+  for (let i = 0; i < visible.length; i++) {
+    const c = visible[i];
+    const v = c.v || 1;
+    const x = (i + 0.5) * spacing;
+    const bh = (v / maxV) * (VH - 4);
+    vctx.fillStyle = c.c >= c.o ? 'rgba(0,212,170,.5)' : 'rgba(255,68,102,.5)';
+    vctx.fillRect(x - candleW/2, VH - bh, candleW, bh);
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  RENDER LOOP
+// ═══════════════════════════════════════════════
+function startLoop() {
+  if (raf) cancelAnimationFrame(raf);
+  function loop() { draw(); raf = requestAnimationFrame(loop); }
+  loop();
+}
+
+// ═══════════════════════════════════════════════
+//  CONTROLS
+// ═══════════════════════════════════════════════
+function setTF(tf) {
+  currentTF = tf;
+  document.querySelectorAll('.tf-btn').forEach(b => b.classList.toggle('active', +b.dataset.tf === tf));
+  if (ws && ws.readyState === 1) {
+    candles = [];
+    loadHistory();
+  }
+}
+
+function toggleOverlay(key) {
+  overlays[key] = !overlays[key];
+  const el = document.getElementById('tog_' + key);
+  el.classList.toggle('on', overlays[key]);
+}
+
+function setStatus(state) {
+  const dot  = document.getElementById('statusDot');
+  const text = document.getElementById('statusText');
+  dot.className = `status-dot ${state}`;
+  const labels = { connected:'LIVE', loading:'LOADING', disconnected:'DISCONNECTED' };
+  text.textContent = labels[state] || state.toUpperCase();
+  text.style.color = state === 'connected' ? 'var(--bull)' : state === 'loading' ? 'var(--warn)' : 'var(--muted)';
+}
+function setStatus(state) {
+  const dot  = document.getElementById('statusDot');
+  const text = document.getElementById('statusText');
+  dot.className = `status-dot ${state}`;
+  const labels = { connected:'LIVE', loading:'LOADING', disconnected:'DISCONNECTED' };
+  text.textContent = labels[state] || state.toUpperCase();
+  text.style.color = state === 'connected' ? 'var(--bull)' : state === 'loading' ? 'var(--warn)' : 'var(--muted)';
+}
+
+// ═══════════════════════════════════════════════
+//  LOG
+// ═══════════════════════════════════════════════
+function addLog(msg, type = 'info') {
+  const panel = document.getElementById('logPanel');
+  const t = new Date().toTimeString().slice(0,8);
+  const div = document.createElement('div');
+  div.className = `log-line ${type}`;
+  div.textContent = `[${t}] ${msg}`;
+  panel.appendChild(div);
+  panel.scrollTop = panel.scrollHeight;
+  if (panel.children.length > 200) panel.removeChild(panel.children[0]);
+}
+
+// ═══════════════════════════════════════════════
+//  MOUSE
+// ═══════════════════════════════════════════════
+chartCanvas.addEventListener('mousemove', e => {
+  const rect = chartCanvas.getBoundingClientRect();
+  mouseX = e.clientX - rect.left;
+  mouseY = e.clientY - rect.top;
+});
+chartCanvas.addEventListener('mouseleave', () => { mouseX = -1; mouseY = -1; });
+
+// Scroll to zoom/pan
+chartCanvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  if (e.ctrlKey) {
+    candleW = Math.max(3, Math.min(20, candleW - Math.sign(e.deltaY)));
+  } else {
+    scrollOffset = Math.max(0, Math.min(candles.length - 10, scrollOffset + Math.round(e.deltaY / 30)));
+  }
+}, { passive: false });
+
+// ═══════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════
+resizeCanvases();
+startLoop();
+addLog('Wyckoff Intelligence Engine ready. Enter API token & connect.', 'event');
+addLog('Scroll: pan chart | Ctrl+Scroll: zoom candles', 'info');
+</script>
+</body>
+</html>
